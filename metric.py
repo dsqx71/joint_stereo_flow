@@ -8,60 +8,19 @@ class EndPointErr(mx.metric.EvalMetric):
     """
         euclidean distance:    sqrt((u_pred-u_label)^2 + (v_pred-v_label)^2)
     """
-    def __init__(self):
-        super(EndPointErr, self).__init__('End Point Error')
+    def __init__(self, index, name):
+        super(EndPointErr, self).__init__(name)
+        self.index = index
 
     def update(self, gt, pred):
-        #
-        # pred = pred[self.which].asnumpy()
-        # gt = gt[self.which].asnumpy()
-        #
-        # r = pred - gt
-        # r = np.power(r, 2)
-        # r = np.sqrt(r.sum(axis=1))
 
-        # plt.figure()
-        # plt.imshow(pred[-5].asnumpy()[0].transpose(1,2,0))
-        # plt.colorbar()
-        # plt.waitforbuttonpress()
-        #
-        # plt.figure()
-        # plt.imshow(pred[-4].asnumpy()[0].transpose(1,2,0))
-        # plt.colorbar()
-        # plt.waitforbuttonpress()
-        #
-        # plt.figure()
-        # plt.imshow(pred[-3].asnumpy()[0].transpose(1,2,0))
-        # plt.colorbar()
-        # plt.waitforbuttonpress()
-        #
-        # plt.figure()
-        # plt.imshow(pred[-2].asnumpy()[0].transpose(1,2,0))
-        # plt.colorbar()
-        # plt.waitforbuttonpress()
-        # #
-        # plt.figure()
-        # plt.imshow(pred[-1].asnumpy()[0, 0])
-        # plt.colorbar()
-        # plt.waitforbuttonpress()
-        #
-        # plt.figure()
-        # plt.imshow(pred[-1].asnumpy()[0, 1])
-        # plt.colorbar()
-        # plt.waitforbuttonpress()
-        #
-        # plt.figure()
-        # plt.imshow(pred[-1].asnumpy()[0, 2])
-        # plt.colorbar()
-        # plt.waitforbuttonpress()
-        #
-        # plt.figure()
-        # util.plot_velocity_vector(pred[-1].asnumpy()[0, 3:].transpose(1,2,0))
-        # plt.colorbar()
-        # plt.waitforbuttonpress()
+        gt = gt[0].asnumpy()[:,self.index[0]:self.index[1]]
+        pred = pred[0].asnumpy()[:,self.index[0]:self.index[1]]
+        r = np.power(pred - gt, 2)
+        r = np.power(r.sum(axis=1), 0.5)
 
-        self.sum_metric += pred[0].asnumpy()
-        self.num_inst += 1.0
+        self.sum_metric += r.mean()
+        self.num_inst += 1
 
 class D1all(mx.metric.EvalMetric):
 

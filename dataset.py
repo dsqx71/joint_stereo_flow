@@ -156,7 +156,7 @@ class SythesisData(DataSet):
     def shapes():
         return 540, 960
 
-    def name():
+    def name(self):
         return 'synthesisData' + '_'.join(self.data_list)
 
     @staticmethod
@@ -183,7 +183,9 @@ class SythesisData(DataSet):
         return img1, img2, img3, img4, dis1, dis2, change, flow, img_dir[0].split('/')[-1]
 
 class KittiDataset(DataSet):
-
+    '''
+        Kitti stereo 2015 dataset : http://www.cvlibs.net/datasets/kitti/eval_scene_flow.php?benchmark=stereo
+    '''
     def __init__(self,is_train,prefix=cfg.dataset.kitti_prefix):
 
         if is_train == False:
@@ -247,7 +249,7 @@ class KittiDataset(DataSet):
 
             return img1_left, img1_right, img2_left, img2_right, dis1,dis2,flow,valid
 
-        except  :
+        except :
 
             return img1_left, img1_right, img2_left, img2_right, None, None,None,None
 

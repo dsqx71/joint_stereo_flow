@@ -1,6 +1,54 @@
 import mxnet as mx
 from config import cfg
 
+
+class SparseRegressionLoss(mx.operator.NumpyOp):
+    '''
+        if label is nan, don't compute gradient
+    '''
+
+    def __init__(self,is_l1,loss_scale):
+
+        super(SparseRegressionLoss, self).__init__(False)
+        self.is_L1 = is_l1
+        self.loss_scale = loss_scale
+
+    def list_arguments(self):
+
+        return ['data', 'label']
+
+    def list_outputs(self):
+
+        return ['output']
+
+    def infer_shape(self, in_shape):
+
+        data_shape = in_shape[0]
+        label_shape = in_shape[0]
+        output_shape = in_shape[0]
+
+        return [data_shape, label_shape], [output_shape]
+
+    def forward(self,in_data,out_data):
+
+        x = in_data[0]
+        y = out_data[0]
+        y[:] = x
+
+    def backward(self,out_grad, in_data, out_data, in_grad):
+
+        label = in_data[1]
+        y = out_data[0]
+        mask = (label!=label)
+        label[mask] = y[mask]
+        # mask = (np.abs(y-label) >= 1) & (np.abs(y-label)/np.abs(label)>=0.02)
+        dx = in_grad[0]
+        if self.is_L1:
+            dx[:] = np.sign(y-label)*self.loss_scale
+        else:
+            dx[:] = (y-label)*self.loss_scale
+
+
 def block(data,num_filter,name,is_downsample=False,return_regress=False):
 
     # param = num_filter ^2 * 6 * 3 * 3
@@ -54,7 +102,7 @@ def get_conv(name, data, num_filter, kernel, stride, pad, dilate=(1, 1), no_bias
         conv = mx.sym.Deconvolution(name=name, data=data, num_filter=num_filter, kernel=kernel, stride=stride, pad=pad,
                                     no_bias=no_bias)
     if bn:
-        conv = mx.symbol.BatchNorm( name=name + '_bn', data=conv, fix_gamma=False, momentum=0.95, eps=1e-5 + 1e-10)
+        conv = mx.symbol.BatchNorm( name=name + '_bn', data=conv, fix_gamma=False, momentum=0.90, eps=1e-5 + 1e-10)
     return mx.sym.LeakyReLU(name=name + '_prelu', data=conv, act_type='prelu') if with_relu else conv
 
 def get_feature(data,name):
@@ -83,19 +131,31 @@ def upscale(data,num_filter,name):
     data = get_conv(name + 'deconv', data, num_filter=num_filter, pad=(1, 1), kernel=(4, 4), stride=(2, 2), is_conv=False, with_relu=False)
     return data
 
-def get_loss(data,label,grad_scale,name,get_data=False):
+# def get_loss(data,label,grad_scale,name,get_data=False):
+#
+#     loss = mx.symbol.CaffeLoss(data=data, label=label,
+#                                name=name,
+#                                prototxt='''
+#                                layer {
+#                                   type: "L1Loss"
+#                                   loss_weight: %f
+#                                   l1_loss_param {
+#                                     l2_per_location: false
+#                                     normalize_by_num_entries: true
+#                                   }
+#                                 }'''  % grad_scale)
+#
+#     return (loss,data) if get_data else loss
 
-    loss = mx.symbol.CaffeLoss(data=data, label=label,
-                               name=name,
-                               prototxt='''
-                               layer {
-                                  type: "L1Loss"
-                                  loss_weight: %f
-                                  l1_loss_param {
-                                    l2_per_location: false
-                                    normalize_by_num_entries: true
-                                  }
-                                }'''  % grad_scale)
+def get_loss(data,label,grad_scale,name,get_data=False, is_sparse = False):
+
+    # data = mx.sym.Activation(data=data, act_type='relu',name=name+'relu')
+
+    if  is_sparse:
+        loss = SparseRegressionLoss(is_l1=False, loss_scale=grad_scale)
+        loss = loss(data=data, label=label)
+    else:
+        loss = mx.sym.MAERegressionOutput(data=data, label=label, name=name, grad_scale=grad_scale)
 
     return (loss,data) if get_data else loss
 

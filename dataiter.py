@@ -16,7 +16,7 @@ DataBatch = namedtuple('DataBatch', ['data', 'label', 'pad', 'index'])
 
 class Dataiter(mx.io.DataIter):
 
-    def __init__(self, dataset, batch_shape, label_shapes, augment_ratio, n_thread=40, be_shuffle=True, ctx=ctx[0]):
+    def __init__(self, dataset, batch_shape, label_shapes, augment_ratio, n_thread=40, be_shuffle=True):
 
         super(Dataiter, self).__init__()
 
@@ -25,7 +25,6 @@ class Dataiter(mx.io.DataIter):
         self.batch_shape = batch_shape
         self.be_shuffle = be_shuffle
         self.current = 0
-        self.ctx = ctx
 
         if self.be_shuffle:
             self.data_dirs = utils.shuffle(dataset.dirs)
@@ -42,19 +41,18 @@ class Dataiter(mx.io.DataIter):
         self.n_thread = n_thread
         self.worker_proc = None
         self.stop_flag = mp.Value('b', False)
-        self.result_queue = mp.Queue(maxsize=self.batch_size*20)
+        self.result_queue = mp.Queue(maxsize=self.batch_size*35)
         self.data_queue = mp.Queue()
 
 
     @property
     def provide_data(self):
         return [('img1left_data', self.batch_shape), ('img1right_data', self.batch_shape),
-                ('img2left_data', self.batch_shape), ('img2right_data', self.batch_shape)] + \
-               [ ('label{}'.format(i+1), (self.batch_size, 5) + self.label_shapes[i]) for i in range(len(self.label_shapes))]
+                ('img2left_data', self.batch_shape), ('img2right_data', self.batch_shape)]
 
     @property
     def provide_label(self):
-        return []
+        return [ ('label{}'.format(i+1), (self.batch_size, 5) + self.label_shapes[i]) for i in range(len(self.label_shapes))]
 
     def _thread_start(self):
         # init workers
@@ -112,18 +110,18 @@ class Dataiter(mx.io.DataIter):
         return True
 
     def getdata(self):
-        return [mx.nd.array(np.asarray(self.img1left).transpose(0, 3, 1, 2), self.ctx),
-                mx.nd.array(np.asarray(self.img1right).transpose(0, 3, 1, 2), self.ctx),
-                mx.nd.array(np.asarray(self.img2left).transpose(0, 3, 1, 2), self.ctx),
-                mx.nd.array(np.asarray(self.img2right).transpose(0, 3, 1, 2), self.ctx)] + \
-               [ mx.nd.array(np.asarray(self.labels[i]), self.ctx) for i in range(len(self.label_shapes))]
+        return [mx.nd.array(np.asarray(self.img1left).transpose(0, 3, 1, 2)),
+                mx.nd.array(np.asarray(self.img1right).transpose(0, 3, 1, 2)),
+                mx.nd.array(np.asarray(self.img2left).transpose(0, 3, 1, 2)),
+                mx.nd.array(np.asarray(self.img2right).transpose(0, 3, 1, 2))]
+
     @property
     def getaux(self):
         return np.asarray(self.auxs)
 
     def getlabel(self):
 
-        return []
+        return [mx.nd.array(np.asarray(self.labels[i])) for i in range(len(self.label_shapes))]
 
     @staticmethod
     def _worker(worker_id, data_queue, result_queue, stop_word, stop_flag,get_data_function,get_augment,augment_ratio,
@@ -135,6 +133,9 @@ class Dataiter(mx.io.DataIter):
                 break
 
             img1, img2, img3, img4, dis1, dis2, change, flow, index = get_data_function(item)
+
+            if img1 is None or img2 is None or img3 is None or img4 is None:
+                continue
 
             img1 = img1 * 0.00392156862745098
             img2 = img2 * 0.00392156862745098

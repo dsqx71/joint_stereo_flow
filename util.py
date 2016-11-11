@@ -6,7 +6,7 @@ import sys
 import re
 import mxnet.ndarray as nd
 from config import cfg
-from guided_filter.core import filters
+# from guided_filter.core import filters
 from mxnet.ndarray import NDArray, zeros, clip, sqrt
 import math
 import os
@@ -52,18 +52,35 @@ def init_param(scale, args):
             else:
                 init(key,args[key])
 
-def load_checkpoint(prefix, epoch):
+def load_checkpoint(prefix, epoch, net, batchsize):
 
     save_dict = nd.load('%s-%04d.params' % (prefix, epoch))
+    names_arg = net.list_arguments()
+    names_aux = net.list_auxiliary_states()
+
+    shapes = net.infer_shape(img1left_data = batchsize, img1right_data=batchsize,
+                            img2left_data = batchsize, img2right_data=batchsize)
+    args = dict(zip(names_arg, shapes[0]))
+    auxs = dict(zip(names_aux, shapes[2]))
     arg_params = {}
     aux_params = {}
 
     for k, v in save_dict.items():
         tp, name = k.split(':', 1)
-        if tp == 'arg':
+        if tp == 'arg' and name in names_arg:
             arg_params[name] = v
-        if tp == 'aux':
+        if tp == 'aux' and name in names_aux:
             aux_params[name] = v
+
+    init = mx.init.Xavier(rnd_type='gaussian',factor_type='in',magnitude=4)
+    for name in names_arg:
+        if 'data' not in name and 'label' not in name:
+            if name not in arg_params:
+                arg_params[name] = nd.zeros(args[name])
+                init(name,arg_params[name])
+    for name in names_aux:
+        if name not in aux_params:
+            aux_params[name] = nd.zeros(auxs[name])
 
     return arg_params,aux_params
 
@@ -159,7 +176,9 @@ def writePFM(file, image, scale=1):
     image.tofile(file)
 
 def outlier_sum(pred,gt,tau=3):
-
+    """
+        residual > 3  and   residual / gt > 0.05   (defined by kitti)
+    """
     outlier = np.zeros(gt.shape)
     mask = gt > 0
     gt = np.round(gt[mask])
@@ -194,7 +213,9 @@ def plot_velocity_vector(flow):
 
 
 def weight_median_filter(i, left, radius, epsilon, mask):
-
+    """
+       Constant Time Weighted Median Filtering for Stereo Matching and Beyond
+    """
     dispin  = i.copy()
     dispout = dispin.copy()
     dispout[mask] = 0
@@ -304,7 +325,9 @@ class Adam(mx.optimizer.Optimizer):
             weight[:] -= (lr * wd) * weight
 
 def get_idx2name(net):
-
+    """
+        get gradiant requirement
+    """
     idx2name = {}
     arg_name = net.list_arguments()
     param_name = [key for key in arg_name if 'data' not in key and 'label' not in key]
